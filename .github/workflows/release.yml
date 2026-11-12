@@ -1,0 +1,226 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.0.0). Leave empty to use the pushed tag."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PACKAGE_ID: SashikantaPanda.FileHashGenerator
+  APP_NAME: File Hash Generator
+  PUBLISHER: Sashikanta Panda
+  REPO: tukulusashikanta/FileHashGenerator
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.version }}") {
+            $version = "${{ inputs.version }}".TrimStart("v")
+          } elseif ($env:GITHUB_REF -match '^refs/tags/v(.+)$') {
+            $version = $Matches[1]
+          } else {
+            throw "No version provided. Push a v* tag or supply workflow_dispatch.version."
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+([.-].+)?$') {
+            throw "Invalid version '$version'. Expected semantic version like 1.0.0."
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Releasing version $version"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Stamp assembly version
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $info = "FileHashgenerator\Properties\AssemblyInfo.cs"
+          $content = Get-Content $info -Raw
+          $content = [regex]::Replace($content, 'AssemblyVersion\("[^"]+"\)', "AssemblyVersion(`"$version.0`")")
+          $content = [regex]::Replace($content, 'AssemblyFileVersion\("[^"]+"\)', "AssemblyFileVersion(`"$version.0`")")
+          Set-Content -Path $info -Value $content -NoNewline
+
+      - name: Build Release
+        run: >
+          msbuild FileHashgenerator\FileHashgenerator.csproj
+          /p:Configuration=Release
+          /p:Platform=AnyCPU
+          /p:DebugType=None
+          /restore
+          /m
+
+      - name: Install Inno Setup
+        id: inno
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 7\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            winget install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+            $url = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe"
+            $installer = Join-Path $env:RUNNER_TEMP "innosetup-installer.exe"
+            Invoke-WebRequest -Uri $url -OutFile $installer
+            Start-Process -FilePath $installer -ArgumentList "/VERYSILENT","/NORESTART","/SUPPRESSMSGBOXES","/SP-" -Wait
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "ISCC.exe not found after Inno Setup install." }
+          "iscc=$iscc" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Using Inno Setup compiler: $iscc"
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $iscc = "${{ steps.inno.outputs.iscc }}"
+          New-Item -ItemType Directory -Force -Path installer\output | Out-Null
+          & $iscc "installer\FileHashGenerator.iss" "/DMyAppVersion=$version"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
+
+      - name: Compute SHA256 and package artifacts
+        id: checksum
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $exeName = "FileHashGenerator-Setup-$version.exe"
+          $exePath = "installer\output\$exeName"
+          if (-not (Test-Path $exePath)) { throw "Installer not found: $exePath" }
+
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $exePath).Hash.ToUpperInvariant()
+          $shaFile = "$exePath.sha256"
+          Set-Content -Path $shaFile -Value "$hash  $exeName" -NoNewline
+
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item $exePath artifacts\
+          Copy-Item $shaFile artifacts\
+
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "installer=$exeName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "SHA256: $hash"
+
+      - name: Generate release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $sha = "${{ steps.checksum.outputs.sha256 }}"
+          $installer = "${{ steps.checksum.outputs.installer }}"
+          $notesPath = "artifacts\RELEASE_NOTES.md"
+
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $section = $null
+          if ($changelog -match "(?ms)^## \[$([regex]::Escape($version))\].*?(?=^## \[|\z)") {
+            $section = $Matches[0].Trim()
+          }
+
+          $body = @()
+          $body += "# File Hash Generator v$version"
+          $body += ""
+          $body += "**Author:** Sashikanta Panda"
+          $body += ""
+          if ($section) {
+            $body += $section
+          } else {
+            $body += "## Changes"
+            $body += "- See CHANGELOG.md for details."
+          }
+          $body += ""
+          $body += "## Installer"
+          $body += ""
+          $body += "- Asset: ``$installer``"
+          $body += "- SHA256: ``$sha``"
+          $body += ""
+          $body += "## Install with WinGet (after package approval)"
+          $body += ""
+          $body += "``````"
+          $body += "winget install SashikantaPanda.FileHashGenerator"
+          $body += "``````"
+          $body += ""
+          $body += "Manifest templates for this version are attached as workflow artifacts."
+
+          ($body -join "`n") | Set-Content -Path $notesPath -Encoding utf8
+          "path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Generate WinGet manifests
+        shell: pwsh
+        run: |
+          .\scripts\generate-winget-manifest.ps1 `
+            -Version "${{ steps.version.outputs.version }}" `
+            -Sha256 "${{ steps.checksum.outputs.sha256 }}" `
+            -OutputRoot "artifacts\winget"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: File Hash Generator v${{ steps.version.outputs.version }}
+          body_path: ${{ steps.notes.outputs.path }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/FileHashGenerator-Setup-${{ steps.version.outputs.version }}.exe
+            artifacts/FileHashGenerator-Setup-${{ steps.version.outputs.version }}.exe.sha256
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload WinGet manifests artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests-${{ steps.version.outputs.version }}
+          path: artifacts/winget
+          if-no-files-found: error
+
+      - name: Job summary
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $sha = "${{ steps.checksum.outputs.sha256 }}"
+          $installer = "${{ steps.checksum.outputs.installer }}"
+          $url = "https://github.com/${{ env.REPO }}/releases/download/v$version/$installer"
+          @"
+          ## Release v$version
+
+          | Item | Value |
+          | --- | --- |
+          | Author | Sashikanta Panda |
+          | Installer | ``$installer`` |
+          | Download URL | $url |
+          | SHA256 | ``$sha`` |
+          | Package ID | ``${{ env.PACKAGE_ID }}`` |
+
+          ### Next step — submit / update WinGet
+
+          ``````powershell
+          wingetcreate update ${{ env.PACKAGE_ID }} --urls $url --version $version --submit
+          ``````
+
+          Or copy the ``winget-manifests-$version`` artifact into a PR against ``microsoft/winget-pkgs``.
+          See ``docs/WINGET.md``.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

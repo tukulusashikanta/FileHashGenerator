@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release
+        run: >
+          msbuild FileHashgenerator\FileHashgenerator.csproj
+          /p:Configuration=Release
+          /p:Platform=AnyCPU
+          /restore
+          /m
