@@ -3,45 +3,203 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:FileHashgenerator"
         mc:Ignorable="d"
-        Title="File Hash Generator" Height="450" Width="800"
-        Icon="pack://application:,,,/HashGenerator.ico">
-    <Grid Margin="10">
+        Title="File Hash Generator"
+        Height="640" Width="860"
+        MinHeight="560" MinWidth="720"
+        WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/HashGenerator.ico"
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
 
-        <Label Content="Selected File:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,5,0"/>
-        <TextBox x:Name="FilePathTextBox" Grid.Row="0" Grid.Column="1" IsReadOnly="True" Margin="0,5,0,5"/>
-        <Button Content="Browse..." Grid.Row="0" Grid.Column="2" Margin="5,5,0,5" Click="BrowseFile_Click"/>
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource HeaderBrush}" Padding="28,22">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="File Hash Generator"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="White"
+                               FontFamily="Segoe UI Variable Display, Segoe UI"/>
+                    <TextBlock Text="SHA256 · MD5 · SHA1 · Base64 — by Sashikanta Panda"
+                               Margin="0,6,0,0"
+                               Foreground="#A8C7BC"
+                               FontSize="12.5"/>
+                </StackPanel>
+                <Border Grid.Column="1"
+                        Background="#1E4A3E"
+                        CornerRadius="6"
+                        Padding="12,8"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="VersionText"
+                               Text="v1.1.0"
+                               Foreground="#C9E4DA"
+                               FontWeight="SemiBold"/>
+                </Border>
+            </Grid>
+        </Border>
 
-        <Label Content="Hashing Algorithm:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,5,0"/>
-        <ComboBox x:Name="HashAlgorithmComboBox" Grid.Row="1" Grid.Column="1" Margin="0,5,0,5" SelectedIndex="0">
-            <ComboBoxItem Content="SHA256"/>
-            <ComboBoxItem Content="MD5"/>
-            <ComboBoxItem Content="SHA1"/>
-        </ComboBox>
+        <!-- Body -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="28,22,28,12">
+            <StackPanel MaxWidth="900">
 
-        <Button Content="Calculate Hash" Grid.Row="2" Grid.Column="1" Margin="0,5,0,5" Click="CalculateHash_Click"/>
-        <Label Content="Hash Result:" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,5,0"/>
-        <TextBox x:Name="HashTextBox" Grid.Row="3" Grid.Column="1" IsReadOnly="True" Margin="0,5,0,5"/>
+                <!-- File picker -->
+                <TextBlock Style="{StaticResource SectionLabel}" Text="FILE"/>
+                <Border Background="{StaticResource SurfaceBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="16"
+                        Margin="0,0,0,18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-        <Button Content="Convert to Base64" Grid.Row="4" Grid.Column="1" Margin="0,5,0,5" Click="ConvertToBase64_Click"/>
-        <Label Content="Base64 Encoded:" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,5,0"/>
-        <TextBox x:Name="Base64TextBox" Grid.Row="5" Grid.Column="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="100" Margin="0,5,0,5"/>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock x:Name="FileNameText"
+                                       Text="Drop a file here or browse to select"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="FileMetaText"
+                                       Text="No file selected"
+                                       Margin="0,4,0,0"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Content="Browse"
+                                Style="{StaticResource SecondaryButton}"
+                                VerticalAlignment="Center"
+                                Margin="16,0,0,0"
+                                Click="BrowseFile_Click"/>
+
+                        <TextBox x:Name="FilePathTextBox"
+                                 Grid.Row="1"
+                                 Grid.ColumnSpan="2"
+                                 Style="{StaticResource MonoBox}"
+                                 IsReadOnly="True"
+                                 Margin="0,14,0,0"
+                                 Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+
+                <!-- Algorithm -->
+                <TextBlock Style="{StaticResource SectionLabel}" Text="HASH ALGORITHM"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                    <RadioButton x:Name="Sha256Radio"
+                                 Content="SHA256"
+                                 Style="{StaticResource ChipRadio}"
+                                 GroupName="Algo"
+                                 IsChecked="True"/>
+                    <RadioButton x:Name="Md5Radio"
+                                 Content="MD5"
+                                 Style="{StaticResource ChipRadio}"
+                                 GroupName="Algo"/>
+                    <RadioButton x:Name="Sha1Radio"
+                                 Content="SHA1"
+                                 Style="{StaticResource ChipRadio}"
+                                 GroupName="Algo"/>
+                </StackPanel>
+
+                <!-- Actions -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                    <Button x:Name="CalculateButton"
+                            Content="Calculate Hash"
+                            Style="{StaticResource PrimaryButton}"
+                            MinWidth="150"
+                            Click="CalculateHash_Click"/>
+                    <Button x:Name="Base64Button"
+                            Content="Convert to Base64"
+                            Style="{StaticResource SecondaryButton}"
+                            MinWidth="150"
+                            Margin="10,0,0,0"
+                            Click="ConvertToBase64_Click"/>
+                    <Button Content="Clear"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="10,0,0,0"
+                            Click="Clear_Click"/>
+                </StackPanel>
+
+                <!-- Hash result -->
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="HASH RESULT" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1"
+                            Content="Copy"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="12,5"
+                            Click="CopyHash_Click"/>
+                </Grid>
+                <TextBox x:Name="HashTextBox"
+                         Style="{StaticResource MonoBox}"
+                         IsReadOnly="True"
+                         MinHeight="44"
+                         Margin="0,0,0,18"
+                         VerticalScrollBarVisibility="Auto"/>
+
+                <!-- Base64 -->
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource SectionLabel}" Text="BASE64 ENCODED" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1"
+                            Content="Copy"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="12,5"
+                            Click="CopyBase64_Click"/>
+                </Grid>
+                <TextBox x:Name="Base64TextBox"
+                         Style="{StaticResource MonoBox}"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         MinHeight="140"
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,8"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Status bar -->
+        <Border Grid.Row="2"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="28,10">
+            <DockPanel>
+                <TextBlock x:Name="StatusText"
+                           Text="Ready"
+                           Foreground="{StaticResource MutedBrush}"
+                           FontSize="12"/>
+                <TextBlock DockPanel.Dock="Right"
+                           HorizontalAlignment="Right"
+                           Text="© 2026 Sashikanta Panda"
+                           Foreground="{StaticResource MutedBrush}"
+                           FontSize="12"/>
+            </DockPanel>
+        </Border>
     </Grid>
 </Window>

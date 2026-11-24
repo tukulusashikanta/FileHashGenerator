@@ -8,10 +8,11 @@ A lightweight Windows desktop utility that calculates cryptographic hashes (SHA2
 
 ## Features
 
-- Select any local file via a browse dialog
+- Select a file via browse dialog or drag-and-drop
 - Compute **SHA256**, **MD5**, or **SHA1** hashes
 - Convert the selected file to a **Base64** string
-- Simple WPF UI for Windows 10/11
+- Copy hash / Base64 results in one click
+- Responsive WPF UI for Windows 10/11
 
 ## Requirements
 
